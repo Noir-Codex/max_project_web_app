@@ -1,16 +1,9 @@
--- MAX WebApp Database Schema
--- PostgreSQL Database Initialization Script
-
--- Drop tables if exist (для чистой установки)
-DROP TABLE IF EXISTS attendance CASCADE;
-DROP TABLE IF EXISTS schedule CASCADE;
-DROP TABLE IF EXISTS group_students CASCADE;
-DROP TABLE IF EXISTS groups CASCADE;
-DROP TABLE IF EXISTS subjects CASCADE;
-DROP TABLE IF EXISTS users CASCADE;
+-- MAX WebApp Database Schema (idempotent version)
+-- Этот скрипт создаёт недостающие таблицы, индексы и триггеры
+-- Существующие объекты не затрагиваются
 
 -- Таблица пользователей
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     telegram_id BIGINT UNIQUE,
     username VARCHAR(50),
@@ -24,12 +17,12 @@ CREATE TABLE users (
 );
 
 -- Индексы для пользователей
-CREATE INDEX idx_users_telegram_id ON users(telegram_id);
-CREATE INDEX idx_users_role ON users(role);
-CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 -- Таблица групп
-CREATE TABLE groups (
+CREATE TABLE IF NOT EXISTS groups (
     id SERIAL PRIMARY KEY,
     name VARCHAR(50) NOT NULL UNIQUE,
     course INTEGER NOT NULL CHECK (course >= 1 AND course <= 6),
@@ -40,12 +33,12 @@ CREATE TABLE groups (
 );
 
 -- Индексы для групп
-CREATE INDEX idx_groups_name ON groups(name);
-CREATE INDEX idx_groups_course ON groups(course);
-CREATE INDEX idx_groups_curator_id ON groups(curator_id);
+CREATE INDEX IF NOT EXISTS idx_groups_name ON groups(name);
+CREATE INDEX IF NOT EXISTS idx_groups_course ON groups(course);
+CREATE INDEX IF NOT EXISTS idx_groups_curator_id ON groups(curator_id);
 
 -- Таблица связи студентов и групп (многие ко многим)
-CREATE TABLE group_students (
+CREATE TABLE IF NOT EXISTS group_students (
     id SERIAL PRIMARY KEY,
     group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
     student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -54,11 +47,11 @@ CREATE TABLE group_students (
 );
 
 -- Индексы для связи групп и студентов
-CREATE INDEX idx_group_students_group_id ON group_students(group_id);
-CREATE INDEX idx_group_students_student_id ON group_students(student_id);
+CREATE INDEX IF NOT EXISTS idx_group_students_group_id ON group_students(group_id);
+CREATE INDEX IF NOT EXISTS idx_group_students_student_id ON group_students(student_id);
 
 -- Таблица дисциплин
-CREATE TABLE subjects (
+CREATE TABLE IF NOT EXISTS subjects (
     id SERIAL PRIMARY KEY,
     name VARCHAR(200) NOT NULL UNIQUE,
     type VARCHAR(50) NOT NULL CHECK (type IN ('Лекция', 'Практика', 'Лабораторная')),
@@ -68,11 +61,11 @@ CREATE TABLE subjects (
 );
 
 -- Индексы для дисциплин
-CREATE INDEX idx_subjects_name ON subjects(name);
-CREATE INDEX idx_subjects_type ON subjects(type);
+CREATE INDEX IF NOT EXISTS idx_subjects_name ON subjects(name);
+CREATE INDEX IF NOT EXISTS idx_subjects_type ON subjects(type);
 
 -- Таблица расписания
-CREATE TABLE schedule (
+CREATE TABLE IF NOT EXISTS schedule (
     id SERIAL PRIMARY KEY,
     subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
     group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
@@ -89,16 +82,16 @@ CREATE TABLE schedule (
 );
 
 -- Индексы для расписания
-CREATE INDEX idx_schedule_subject_id ON schedule(subject_id);
-CREATE INDEX idx_schedule_group_id ON schedule(group_id);
-CREATE INDEX idx_schedule_teacher_id ON schedule(teacher_id);
-CREATE INDEX idx_schedule_day_of_week ON schedule(day_of_week);
-CREATE INDEX idx_schedule_week_type ON schedule(week_type);
+CREATE INDEX IF NOT EXISTS idx_schedule_subject_id ON schedule(subject_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_group_id ON schedule(group_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_teacher_id ON schedule(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_schedule_day_of_week ON schedule(day_of_week);
+CREATE INDEX IF NOT EXISTS idx_schedule_week_type ON schedule(week_type);
 
 -- Комментарий: week_type = 0 (каждую неделю), 1 (первая неделя), 2 (вторая неделя)
 
 -- Таблица посещаемости
-CREATE TABLE attendance (
+CREATE TABLE IF NOT EXISTS attendance (
     id SERIAL PRIMARY KEY,
     lesson_id INTEGER NOT NULL REFERENCES schedule(id) ON DELETE CASCADE,
     student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -111,10 +104,10 @@ CREATE TABLE attendance (
 );
 
 -- Индексы для посещаемости
-CREATE INDEX idx_attendance_lesson_id ON attendance(lesson_id);
-CREATE INDEX idx_attendance_student_id ON attendance(student_id);
-CREATE INDEX idx_attendance_date ON attendance(date);
-CREATE INDEX idx_attendance_status ON attendance(status);
+CREATE INDEX IF NOT EXISTS idx_attendance_lesson_id ON attendance(lesson_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_student_id ON attendance(student_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date);
+CREATE INDEX IF NOT EXISTS idx_attendance_status ON attendance(status);
 
 -- Функция для автоматического обновления updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -126,20 +119,60 @@ END;
 $$ language 'plpgsql';
 
 -- Триггеры для автоматического обновления updated_at
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'update_users_updated_at'
+    ) THEN
+        CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END;
+$$;
 
-CREATE TRIGGER update_groups_updated_at BEFORE UPDATE ON groups
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'update_groups_updated_at'
+    ) THEN
+        CREATE TRIGGER update_groups_updated_at BEFORE UPDATE ON groups
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END;
+$$;
 
-CREATE TRIGGER update_subjects_updated_at BEFORE UPDATE ON subjects
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'update_subjects_updated_at'
+    ) THEN
+        CREATE TRIGGER update_subjects_updated_at BEFORE UPDATE ON subjects
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END;
+$$;
 
-CREATE TRIGGER update_schedule_updated_at BEFORE UPDATE ON schedule
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'update_schedule_updated_at'
+    ) THEN
+        CREATE TRIGGER update_schedule_updated_at BEFORE UPDATE ON schedule
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END;
+$$;
 
-CREATE TRIGGER update_attendance_updated_at BEFORE UPDATE ON attendance
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'update_attendance_updated_at'
+    ) THEN
+        CREATE TRIGGER update_attendance_updated_at BEFORE UPDATE ON attendance
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END;
+$$;
 
 -- Комментарии к таблицам
 COMMENT ON TABLE users IS 'Пользователи системы (администраторы, преподаватели, студенты)';

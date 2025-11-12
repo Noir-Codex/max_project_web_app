@@ -6,6 +6,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const { testConnection } = require('./config/database');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
+const { ensureDatabaseSchema } = require('./utils/schemaManager');
 
 // Routes
 const authRoutes = require('./routes/auth');
@@ -111,6 +112,9 @@ async function startServer() {
       process.exit(1);
     }
     
+    // Ensure required tables exist
+    await ensureDatabaseSchema();
+
     // Start listening
     app.listen(PORT, () => {
       console.log('='.repeat(50));

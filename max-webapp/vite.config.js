@@ -57,6 +57,7 @@ export default defineConfig({
   // Настройки dev server
   server: {
     port: 3000,
+    strictPort: true,
     host: true,
     open: true,
     // Важно для React Router - все маршруты перенаправляем на index.html
